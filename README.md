@@ -750,7 +750,6 @@ locust/
 ├── glossary_pb2.py            # Сгенерированные сообщения
 ├── glossary_pb2_grpc.py       # Сгенерированные сервисы
 └── отчёт/
-    ├── отчёт.md               # Данный отчёт
     ├── normal_workload_*.html # HTML-отчёт Normal Workload
     ├── stress_test_*.html     # HTML-отчёт Stress Test
     └── stability_test_*.html  # HTML-отчёт Stability Test
