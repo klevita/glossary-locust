@@ -1,0 +1,11 @@
+# Locust Load Testing Requirements
+
+# Core load testing framework
+locust==2.20.0
+
+# gRPC support
+grpcio==1.60.0
+grpcio-tools==1.60.0
+
+# Protocol Buffers (installed with grpcio-tools, but explicit for clarity)
+protobuf>=4.21.0

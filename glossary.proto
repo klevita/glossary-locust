@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package glossary;
+
+// ============ Messages ============
+
+// Glossary Item Messages
+message GlossaryItem {
+  int32 id = 1;
+  string name = 2;
+  string description = 3;
+}
+
+message CreateGlossaryItemRequest {
+  string name = 1;
+  string description = 2;
+}
+
+message UpdateGlossaryItemRequest {
+  int32 id = 1;
+  string name = 2;
+  string description = 3;
+}
+
+message DeleteGlossaryItemRequest {
+  int32 id = 1;
+}
+
+message GetAllGlossaryItemsRequest {
+  // Empty request - could add pagination later
+}
+
+message GetAllGlossaryItemsResponse {
+  repeated GlossaryItem items = 1;
+}
+
+message GlossaryItemResponse {
+  oneof result {
+    GlossaryItem item = 1;
+    Error error = 2;
+  }
+}
+
+// Link Messages
+message GlossaryLink {
+  int32 id = 1;
+  int32 source = 2;
+  int32 target = 3;
+  string name = 4;
+}
+
+message CreateLinkRequest {
+  int32 source = 1;
+  int32 target = 2;
+  string name = 3;
+}
+
+message UpdateLinkRequest {
+  int32 id = 1;
+  int32 source = 2;
+  int32 target = 3;
+  string name = 4;
+}
+
+message DeleteLinkRequest {
+  int32 id = 1;
+}
+
+message GetAllLinksRequest {
+  // Empty request
+}
+
+message GetAllLinksResponse {
+  repeated GlossaryLink links = 1;
+}
+
+message LinkResponse {
+  oneof result {
+    GlossaryLink link = 1;
+    Error error = 2;
+  }
+}
+
+// Common error message
+message Error {
+  string message = 1;
+  int32 code = 2;  // gRPC status code
+}
+
+// ============ Services ============
+
+service GlossaryService {
+  rpc GetAllItems(GetAllGlossaryItemsRequest) returns (GetAllGlossaryItemsResponse);
+  rpc CreateItem(CreateGlossaryItemRequest) returns (GlossaryItemResponse);
+  rpc UpdateItem(UpdateGlossaryItemRequest) returns (GlossaryItemResponse);
+  rpc DeleteItem(DeleteGlossaryItemRequest) returns (GlossaryItemResponse);
+}
+
+service LinkService {
+  rpc GetAllLinks(GetAllLinksRequest) returns (GetAllLinksResponse);
+  rpc CreateLink(CreateLinkRequest) returns (LinkResponse);
+  rpc UpdateLink(UpdateLinkRequest) returns (LinkResponse);
+  rpc DeleteLink(DeleteLinkRequest) returns (LinkResponse);
+}
