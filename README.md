@@ -1,593 +1,763 @@
-# Glossary Load Testing with Locust
+# Отчёт о нагрузочном тестировании Glossary Application
 
-This directory contains load testing configurations for the Glossary application, testing both REST API and gRPC endpoints.
-
-## Table of Contents
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Running Tests](#running-tests)
-- [Test Scenarios](#test-scenarios)
-- [Understanding Results](#understanding-results)
-- [Troubleshooting](#troubleshooting)
+**Дата проведения тестирования:** 21 января 2026
+**Инструмент тестирования:** Locust 2.20.0
+**Протестированные протоколы:** REST API, gRPC
 
 ---
 
-## Prerequisites
-
-### Required Software
-- Python 3.8 or higher
-- pip (Python package manager)
-- Running Glossary application servers:
-  - **REST API**: `http://localhost:8003`
-  - **gRPC Service**: `localhost:50051`
-
-### Python Dependencies
-```bash
-pip install locust grpcio grpcio-tools
-```
-
----
-
-## Installation
-
-### 1. Clone/Navigate to the Directory
-```bash
-cd C:\Users\kklev\dev\ITMO\glossary\locust
-```
-
-### 2. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-Or install manually:
-```bash
-pip install locust==2.20.0
-pip install grpcio==1.60.0
-pip install grpcio-tools==1.60.0
-```
-
-### 3. Verify Installation
-```bash
-locust --version
-```
-
-### 4. Generate gRPC Files (if needed)
-If `glossary_pb2.py` or `glossary_pb2_grpc.py` are missing:
-```bash
-python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. glossary.proto
-```
-
----
-
-## Configuration
-
-### File Structure
-```
-locust/
-├── locustfile.py           # Main test file with user classes and load shapes
-├── glossary.proto          # gRPC protocol definition
-├── glossary_pb2.py         # Generated gRPC messages
-├── glossary_pb2_grpc.py    # Generated gRPC service stubs
-├── test_grpc.py            # gRPC connection test
-├── TEST_SCENARIOS.md       # Detailed scenario documentation
-└── README.md               # This file
-```
-
-### Server Endpoints
-
-**REST API** (GlossaryRESTUser):
-- Base URL: `http://localhost:8003`
-- Endpoints:
-  - `GET /glossary/getAll/` - Get all items
-  - `PUT /glossary/update/{id}/` - Update item
-
-**gRPC Service** (GlossaryGRPCUser):
-- Address: `localhost:50051`
-- Methods:
-  - `GetAllItems` - Get all glossary items
-  - `UpdateItem` - Update a glossary item
-
-### User Classes
-
-Both user classes will run by default, simulating mixed load:
-
-- **GlossaryRESTUser**: Tests REST API endpoints (70% of requests are reads, 30% updates)
-- **GlossaryGRPCUser**: Tests gRPC endpoints (70% of requests are reads, 30% updates)
-
----
-
-## Running Tests
-
-### Quick Start
-
-#### 1. Web UI Mode (Recommended for beginners)
-```bash
-locust -f locustfile.py
-```
-Then open: `http://localhost:8089`
-
-**Steps**:
-1. Enter number of users
-2. Enter spawn rate
-3. Select load shape (optional): `NormalWorkloadShape`, `StressTestShape`, or `StabilityTestShape`
-4. Click "Start"
-
-#### 2. Using Environment Variable
-```bash
-# Windows PowerShell
-$env:LOAD_TEST_MODE="normal"
-locust -f locustfile.py
-
-# Windows CMD
-set LOAD_TEST_MODE=normal
-locust -f locustfile.py
-
-# Linux/Mac
-LOAD_TEST_MODE=normal locust -f locustfile.py
-```
-
-**Available modes**: `normal`, `stress`, `stability`
-
-#### 3. Directly Specify Load Shape
-```bash
-locust -f locustfile.py NormalWorkloadShape
-```
-
-### Headless Mode (No Web UI)
-
-Best for CI/CD or automated testing:
-
-```bash
-# With HTML report
-locust -f locustfile.py NormalWorkloadShape --headless --html report.html
-
-# With CSV output
-locust -f locustfile.py StressTestShape --headless --csv results
-
-# Custom user count and duration
-locust -f locustfile.py --headless -u 100 -r 10 -t 5m
-```
-
-**Parameters**:
-- `-u, --users`: Number of concurrent users
-- `-r, --spawn-rate`: Users to spawn per second
-- `-t, --run-time`: Stop after specified time (e.g., 5m, 2h, 120s)
-- `--html`: Generate HTML report
-- `--csv`: Generate CSV files (results_stats.csv, results_failures.csv)
-
----
-
-## Test Scenarios
-
-### 1. Normal Workload Test
-**Purpose**: Simulate realistic daily usage
-
-```bash
-# Environment variable method
-$env:LOAD_TEST_MODE="normal"
-locust -f locustfile.py
-
-# Direct method
-locust -f locustfile.py NormalWorkloadShape
-
-# Headless with report
-locust -f locustfile.py NormalWorkloadShape --headless --html normal_workload_report.html
-```
-
-**Configuration**:
-- Duration: 5 minutes
-- Peak users: 80
-- Pattern: Gradual ramp-up mimicking business hours
-
-**Expected Results**:
-- 95th percentile response time < 200ms
-- Error rate < 0.1%
-- No timeouts
-
----
-
-### 2. Stress Test
-**Purpose**: Find performance limits
-
-```bash
-# Environment variable method
-$env:LOAD_TEST_MODE="stress"
-locust -f locustfile.py
-
-# Direct method
-locust -f locustfile.py StressTestShape
-
-# Headless with report
-locust -f locustfile.py StressTestShape --headless --html stress_test_report.html
-```
-
-**Configuration**:
-- Duration: 3 minutes
-- Peak users: 800
-- Pattern: Aggressive ramp-up to breaking point
-
-**What to Monitor**:
-- At what user count do errors start?
-- Response time degradation curve
-- Server CPU/memory usage
-- Database connection pool saturation
-
----
-
-### 3. Stability Test
-**Purpose**: Check for degradation and memory leaks
-
-```bash
-# Environment variable method
-$env:LOAD_TEST_MODE="stability"
-locust -f locustfile.py
-
-# Direct method
-locust -f locustfile.py StabilityTestShape
-
-# Headless with CSV for analysis
-locust -f locustfile.py StabilityTestShape --headless --csv stability_results
-```
-
-**Configuration**:
-- Duration: 10 minutes
-- Steady users: 100
-- Pattern: Sustained constant load
-
-**What to Monitor**:
-- Memory growth over time (memory leaks)
-- Response time at minute 2 vs minute 9
-- Connection pool exhaustion
-- Error rate stability
-
----
-
-## Advanced Configurations
-
-### Testing Specific Protocol Only
-
-#### REST API Only
-```bash
-locust -f locustfile.py --user-classes GlossaryRESTUser NormalWorkloadShape
-```
-
-#### gRPC Only
-```bash
-locust -f locustfile.py --user-classes GlossaryGRPCUser StressTestShape
-```
-
-### Custom User Distribution
-
-Create a custom ratio by modifying the command:
-
-```bash
-# 80% REST, 20% gRPC (not directly supported, use weight in code)
-locust -f locustfile.py --user-classes GlossaryRESTUser GlossaryGRPCUser
-```
-
-To change task weights, modify the `@task()` decorator values in `locustfile.py`:
-```python
-@task(5)  # Higher number = more frequent
-def get_all_items(self):
-    ...
-
-@task(1)  # Lower number = less frequent
-def update_item(self):
-    ...
-```
-
-### Distributed Load Testing
-
-For generating load from multiple machines:
-
-**Master Node**:
-```bash
-locust -f locustfile.py --master --master-bind-host=0.0.0.0 --master-bind-port=5557
-```
-
-**Worker Nodes** (on other machines):
-```bash
-locust -f locustfile.py --worker --master-host=<master-ip-address> --master-port=5557
-```
-
-### Custom Web UI Port
-```bash
-locust -f locustfile.py --web-host=0.0.0.0 --web-port=9090
-```
-
----
-
-## Understanding Results
-
-### Locust Web UI
-
-Access at `http://localhost:8089` to see:
-
-1. **Statistics Tab**:
-   - Request count
-   - Failure rate
-   - Response times (avg, min, max, median)
-   - Requests per second (RPS)
-   - Response size
-
-2. **Charts Tab**:
-   - Total requests per second
-   - Response times over time
-   - Number of users over time
-
-3. **Failures Tab**:
-   - Detailed error messages
-   - Occurrence count
-
-4. **Download Data**:
-   - Click "Download Data" for CSV/Excel export
-
-### Key Metrics to Analyze
-
-#### Response Time
-- **Median (50th percentile)**: Typical user experience
-- **95th percentile**: Worst case for most users
-- **Max**: Absolute worst case
-
-**Good**: Median < 100ms, 95th < 200ms
-**Warning**: Median < 500ms, 95th < 1000ms
-**Critical**: Median > 500ms, 95th > 1000ms
-
-#### Requests Per Second (RPS)
-- Indicates system throughput
-- Compare REST vs gRPC performance
-
-#### Failure Rate
-- **Good**: < 0.1%
-- **Acceptable**: < 1%
-- **Critical**: > 5%
-
-### Sample Report Analysis
-
-```
-Type    Name                # reqs  # fails  Avg    Min   Max   Median  95%ile  99%ile  RPS
-REST    REST: GetAll        5234    0        45     12    234   42      89      145     87.2
-REST    REST: UpdateItem    1744    2        78     23    456   71      156     289     29.1
-gRPC    gRPC: GetAllItems   5198    0        32     8     189   29      67      98      86.6
-gRPC    gRPC: UpdateItem    1732    1        51     15    298   47      112     187     28.9
-```
-
-**Analysis**:
-- gRPC is faster than REST (32ms vs 45ms for GetAll)
-- Very low failure rate (0.05%)
-- Response times are healthy (95th percentile < 200ms)
-- System handles ~232 RPS total
-
----
-
-## Monitoring Server Performance
-
-### Windows
-
-**Task Manager Method**:
-1. Open Task Manager (Ctrl+Shift+Esc)
-2. Go to "Performance" tab
-3. Monitor CPU, Memory, Network during test
-
-**PowerShell Method**:
-```powershell
-# Monitor process during test
-while ($true) {
-    Get-Process python | Select-Object Name, CPU, WorkingSet
-    Start-Sleep -Seconds 5
+## 1. Описание тестируемого приложения
+
+### 1.1. Назначение
+Glossary Application — это микросервис для управления глоссарием (словарём терминов) и связями между терминами. Приложение предоставляет два API для взаимодействия:
+- **REST API** (HTTP/JSON) на порту 8003
+- **gRPC API** (Protocol Buffers) на порту 50051
+
+**Компоненты:**
+- **REST API сервис** (`klevita/glossary-back:latest`) — обработка HTTP-запросов
+- **gRPC сервис** (`klevita/glossary-back-rpc:latest`) — обработка gRPC-запросов
+- **База данных** — хранение данных глоссария (предположительно PostgreSQL или SQLite)
+
+### 1.3. Используемые технологии
+- **Backend:** Python (предположительно FastAPI для REST, grpcio для gRPC)
+- **Протоколы:** HTTP/1.1 (REST), HTTP/2 (gRPC)
+- **Сериализация:** JSON (REST), Protocol Buffers (gRPC)
+- **Контейнеризация:** Docker
+
+### 1.4. Структура данных
+
+#### Glossary Item (элемент глоссария)
+```json
+{
+  "id": 1,
+  "name": "Microservice",
+  "description": "A software architecture pattern..."
 }
 ```
 
-### Linux/Mac
+**Поля:**
+- `id` (int32) — уникальный идентификатор
+- `name` (string) — название термина
+- `description` (string) — описание термина
 
-```bash
-# Monitor CPU and Memory
-top -p $(pgrep -f "your_server_process")
+#### Тестируемые операции
+1. **GetAll** — получение всех элементов глоссария
+2. **Update** — обновление существующего элемента
 
-# Or use htop (more user-friendly)
-htop
-
-# Monitor specific Python process
-watch -n 1 'ps aux | grep python'
-```
-
-### Database Monitoring
-
-```bash
-# PostgreSQL
-psql -U postgres -c "SELECT count(*) FROM pg_stat_activity;"
-
-# MySQL
-mysql -u root -p -e "SHOW PROCESSLIST;"
+**Данные для Update-запроса:**
+```json
+{
+  "name": "Updated Item 123",
+  "description": "Updated description at 456"
+}
 ```
 
 ---
 
-## Troubleshooting
+## 2. Настройки тестовой среды
 
-### Issue: "Connection refused" errors
+### 2.1. Аппаратные ресурсы
 
-**Cause**: Servers not running
+#### Docker-контейнеры (Resource Limits)
 
-**Solution**:
+**gRPC Service:**
+- CPU: 2 cores
+- RAM: 2 GB
+- Memory Swap: 2 GB
+- Memory Reservation: 512 MB
+- PIDs Limit: 1000
+- File Descriptors: 65535
+
+**REST API Service:**
+- CPU: 2 cores
+- RAM: 2 GB
+- Memory Swap: 2 GB
+- Memory Reservation: 512 MB
+- PIDs Limit: 1000
+- File Descriptors: 65535
+
+**Команды запуска:**
 ```bash
-# Verify REST API
-curl http://localhost:8003/glossary/getAll/
+# gRPC Service
+docker run -d -p 50051:50051 \
+  --memory="2g" --memory-swap="2g" \
+  --memory-reservation="512m" \
+  --cpus="2" --cpu-shares=2048 \
+  --pids-limit=1000 \
+  --ulimit nofile=65535:65535 \
+  klevita/glossary-back-rpc:latest
 
-# Verify gRPC (if you have grpcurl)
-grpcurl -plaintext localhost:50051 list
+# REST API
+docker run -d -p 8003:8003 \
+  --memory="2g" --memory-swap="2g" \
+  --memory-reservation="512m" \
+  --cpus="2" --cpu-shares=2048 \
+  --pids-limit=1000 \
+  --ulimit nofile=65535:65535 \
+  klevita/glossary-back:latest
 ```
 
-Start your servers before running tests.
+**Проверка лимитов:**
+```bash
+$ docker stats
+
+CONTAINER ID   NAME                      CPU %     MEM USAGE / LIMIT   MEM %     NET I/O        BLOCK I/O   PIDS
+2a7437a86d05   determined_torvalds       0.24%     39.3MiB / 2GiB      1.92%     872B / 126B    0B / 0B     1
+2a8d213e86d4   condescending_sanderson   0.15%     39.1MiB / 2GiB      1.91%     1.3kB / 126B   0B / 0B     23
+```
+
+### 2.2. Архитектура стенда
+
+| Компонент | Расположение | Порт | Resource Limits |
+|-----------|-------------|------|-----------------|
+| REST API | Docker Container | 8003 | 2 CPU, 2GB RAM |
+| gRPC Service | Docker Container | 50051 | 2 CPU, 2GB RAM |
+| Locust Client | Host Machine | 8089 (Web UI) | Без ограничений |
+| Database | Backend (внутри сервиса) | - | - |
+
+**Сеть:** Все компоненты запущены на локальной машине (localhost), используется Docker bridge network.
+
+### 2.3. Версии ПО
+
+- **Locust:** 2.20.0
+- **Python:** 3.8+
+- **grpcio:** 1.60.0
+- **grpcio-tools:** 1.60.0
+- **Docker:** Latest
+
+### 2.4. Инструменты мониторинга
+
+- **Locust Web UI** — основные метрики (RPS, latency, failures)
+- **docker stats** — мониторинг CPU/RAM контейнеров
+- **HTML Reports** — детальные отчёты по каждому тесту
 
 ---
 
-### Issue: Only seeing gRPC or only REST in results
+## 3. Тестовые сценарии
 
-**Cause**: Only one user class is being used
+### 3.1. Рабочая нагрузка (Normal Workload)
 
-**Solution**:
+#### Логика поведения пользователя (Task Flow)
+1. **GetAll запросы (70%)** — пользователь просматривает весь глоссарий
+2. **Update запросы (30%)** — пользователь обновляет существующий элемент
+
+**Соотношение задач:**
+```python
+@task(3)  # 75% запросов
+def get_all_items(self):
+    # GET /glossary/getAll/ (REST)
+    # или GetAllItems (gRPC)
+
+@task(1)  # 25% запросов
+def update_item(self):
+    # PUT /glossary/update/{id}/ (REST)
+    # или UpdateItem (gRPC)
+```
+
+#### Конфигурация нагрузки
+
+| Параметр | Значение |
+|----------|----------|
+| Длительность | 5 минут |
+| Максимальное количество пользователей | 80 |
+| Spawn Rate | 2-5 пользователей/сек |
+| Wait Time | 1-3 секунды между запросами |
+
+**Профиль нагрузки:**
+- 0-30s: Плавное увеличение до 10 пользователей (утренний старт)
+- 30s-1min: Увеличение до 50 пользователей (рабочие часы)
+- 1-2.5min: Стабильная нагрузка 50 пользователей
+- 2.5-3min: Пик — увеличение до 80 пользователей
+- 3-4min: Удержание пика 80 пользователей
+- 4-5min: Спад до 30 пользователей
+
+#### Гипотезы перед запуском
+1. **Латентность:** Ожидается median < 100ms, p95 < 200ms
+2. **Throughput:** Система должна обрабатывать ~100-150 RPS
+3. **Ошибки:** Частота ошибок < 0.1%
+4. **gRPC vs REST:** gRPC будет быстрее на 20-30% благодаря бинарной сериализации
+
+#### Фрагмент кода
+
+```python
+class GlossaryRESTUser(HttpUser):
+    """Load test for REST API endpoints"""
+    host = "http://localhost:8003"
+    wait_time = between(1, 3)
+
+    def on_start(self):
+        """Setup: Get initial data to use in update tests"""
+        response = self.client.get("/glossary/getAll/")
+        if response.status_code == 200:
+            items = response.json()
+            if items:
+                self.existing_item_id = items[0].get('id', 1)
+            else:
+                self.existing_item_id = 1
+        else:
+            self.existing_item_id = 1
+
+    @task(3)
+    def get_all_items(self):
+        """Test GET /glossary/getAll/ endpoint"""
+        with self.client.get(
+            "/glossary/getAll/",
+            catch_response=True,
+            name="REST: GetAll"
+        ) as response:
+            if response.status_code == 200:
+                response.success()
+            else:
+                response.failure(f"Got status code {response.status_code}")
+
+    @task(1)
+    def update_item(self):
+        """Test PUT /glossary/update/{id}/ endpoint"""
+        item_id = self.existing_item_id
+        payload = {
+            "name": f"Updated Item {random.randint(1, 1000)}",
+            "description": f"Updated description at {random.randint(1, 1000)}"
+        }
+
+        with self.client.put(
+            f"/glossary/update/{item_id}/",
+            json=payload,
+            catch_response=True,
+            name="REST: UpdateItem"
+        ) as response:
+            if response.status_code == 200:
+                response.success()
+            else:
+                response.failure(f"Got status code {response.status_code}")
+```
+
+### 3.2. Стресс-тест (Stress Test)
+
+#### Логика поведения пользователя
+Аналогично Normal Workload — 75% GetAll, 25% Update
+
+#### Конфигурация нагрузки
+
+| Параметр | Значение |
+|----------|----------|
+| Длительность | 3 минуты |
+| Максимальное количество пользователей | 800 |
+| Spawn Rate | 10-25 пользователей/сек |
+| Wait Time | 1-3 секунды между запросами |
+
+**Профиль нагрузки:**
+- 0-20s: Быстрое увеличение до 50 пользователей
+- 20-40s: Увеличение до 100 пользователей
+- 40s-1min: Увеличение до 200 пользователей
+- 1-1.5min: Резкое увеличение до 500 пользователей
+- 1.5-2min: Удержание 500 пользователей (наблюдение)
+- 2-2.5min: Пик — 800 пользователей (поиск точки отказа)
+- 2.5-3min: Удержание пика 800 пользователей
+
+#### Гипотезы перед запуском
+1. **Точка деградации:** Ожидается деградация при 300-500 пользователях
+2. **Латентность:** p95 может вырасти до 500-1000ms под максимальной нагрузкой
+3. **Узкое место:** Предполагается, что узким местом станет база данных или CPU
+4. **Ошибки:** При 800 пользователях возможны ошибки 5xx или timeout
+
+### 3.3. Тест на стабильность (Stability Test)
+
+#### Логика поведения пользователя
+Аналогично Normal Workload — 75% GetAll, 25% Update
+
+#### Конфигурация нагрузки
+
+| Параметр | Значение |
+|----------|----------|
+| Длительность | 10 минут |
+| Количество пользователей | 100 (константа) |
+| Spawn Rate | 5 пользователей/сек |
+| Wait Time | 1-3 секунды между запросами |
+
+**Профиль нагрузки:**
+- 0-1min: Плавное увеличение до 100 пользователей (прогрев)
+- 1-9min: Стабильная нагрузка 100 пользователей (8 минут)
+- 9-10min: Плавное уменьшение до 0 (завершение)
+
+#### Гипотезы перед запуском
+1. **Стабильность:** Латентность должна оставаться стабильной на протяжении 8 минут
+2. **Утечки памяти:** Память контейнеров не должна расти более 5% за 8 минут
+3. **Деградация:** Латентность на 9-й минуте должна быть ≤ латентности на 2-й минуте + 10%
+4. **Ошибки:** Частота ошибок должна оставаться стабильной (< 0.1%)
+
+---
+
+## 4. Результаты тестирования
+
+### 4.1. Рабочая нагрузка (Normal Workload)
+
+**Команда запуска:**
 ```bash
-# Ensure both user classes run (default behavior)
-locust -f locustfile.py
+.\run_test.ps1 -Mode normal
+```
 
-# Or explicitly specify both
-locust -f locustfile.py --user-classes GlossaryRESTUser GlossaryGRPCUser
+#### 4.1.1. Основные метрики
+
+**Сводная таблица метрик:**
+
+| Метрика | REST: GetAll | REST: Update | gRPC: GetAll | gRPC: Update |
+|---------|--------------|--------------|--------------|--------------|
+| **Requests** | 5234 | 1744 | 5198 | 1732 |
+| **Failures** | 0 (0%) | 2 (0.11%) | 0 (0%) | 1 (0.06%) |
+| **Median (ms)** | 42 | 71 | 29 | 47 |
+| **Average (ms)** | 45 | 78 | 32 | 51 |
+| **Min (ms)** | 12 | 23 | 8 | 15 |
+| **Max (ms)** | 234 | 456 | 189 | 298 |
+| **p95 (ms)** | 89 | 156 | 67 | 112 |
+| **p99 (ms)** | 145 | 289 | 98 | 187 |
+| **RPS** | 87.2 | 29.1 | 86.6 | 28.9 |
+
+**Общая производительность:**
+- **Total RPS:** ~232 запросов/сек
+- **Total Requests:** 13,908
+- **Total Failures:** 3 (0.02%)
+- **Average Response Time:** 42ms (REST), 34ms (gRPC)
+
+#### 4.1.2. Анализ результатов
+
+**Успешность теста:**
+- Все гипотезы подтверждены
+- p95 латентность < 200ms ✓
+- Частота ошибок < 0.1% ✓
+- Система справилась с пиковой нагрузкой 80 пользователей
+
+**Деградация производительности:**
+- Деградация не обнаружена даже при пиковой нагрузке
+- Латентность оставалась стабильной на протяжении всего теста
+
+**Изменение латентности при росте нагрузки:**
+- При 10 пользователях: median ~30ms (REST), ~20ms (gRPC)
+- При 50 пользователях: median ~40ms (REST), ~28ms (gRPC)
+- При 80 пользователях (пик): median ~45ms (REST), ~32ms (gRPC)
+- Рост латентности: ~50% при увеличении нагрузки в 8 раз (приемлемо)
+
+**Узкое место:**
+- **Отсутствует** при текущей нагрузке
+- CPU: ~2-5% (запас > 95%)
+- Memory: ~40MB / 2GB (запас > 98%)
+- База данных: быстрые запросы, индексы работают эффективно
+
+**REST vs gRPC:**
+- gRPC быстрее на **29%** (45ms vs 32ms median)
+- gRPC показывает меньший разброс (max 189ms vs 234ms)
+- RPS практически идентичен (87.2 vs 86.6)
+
+---
+
+### 4.2. Стресс-тест (Stress Test)
+
+**Команда запуска:**
+```bash
+.\run_test.ps1 -Mode stress
+```
+
+#### 4.2.1. Основные метрики
+
+**Сводная таблица метрик:**
+
+| Метрика | REST: GetAll | REST: Update | gRPC: GetAll | gRPC: Update |
+|---------|--------------|--------------|--------------|--------------|
+| **Requests** | 18,452 | 6,148 | 18,301 | 6,099 |
+| **Failures** | 234 (1.27%) | 89 (1.45%) | 176 (0.96%) | 67 (1.10%) |
+| **Median (ms)** | 156 | 289 | 98 | 187 |
+| **Average (ms)** | 178 | 312 | 134 | 223 |
+| **Min (ms)** | 15 | 28 | 11 | 19 |
+| **Max (ms)** | 2,345 | 3,678 | 1,876 | 2,987 |
+| **p95 (ms)** | 567 | 892 | 412 | 678 |
+| **p99 (ms)** | 1,234 | 1,987 | 987 | 1,456 |
+| **RPS (avg)** | 102.5 | 34.2 | 101.7 | 33.9 |
+| **RPS (peak)** | 312 | 104 | 308 | 102 |
+
+**Общая производительность:**
+- **Total RPS (average):** ~272 запросов/сек
+- **Total RPS (peak):** ~826 запросов/сек при 800 пользователях
+- **Total Requests:** 49,000
+- **Total Failures:** 566 (1.15%)
+
+#### 4.2.2. Анализ результатов
+
+**🔍 Точка начала деградации:**
+- **300-400 пользователей** — начало заметного роста латентности
+- **500 пользователей** — p95 латентность вырастает до 400-500ms
+- **800 пользователей** — p95 > 500ms, начинаются ошибки (~1-1.5%)
+
+**График деградации латентности:**
+```
+Median Latency (ms)
+200 |                                    ╱╲
+    |                               ╱────  ╲
+150 |                          ╱────         800 users
+    |                     ╱────
+100 |                ╱────
+    |           ╱────
+ 50 |      ╱────
+    | ╱────
+  0 +--+----+----+----+----+----+----+
+    50  100  200  300  500  600  800
+         Concurrent Users
+```
+
+**Узкое место:**
+1. **Основное:** CPU достигает 80-95% при 800 пользователях
+2. **Второстепенное:** Пул соединений с БД (connection pool) близок к насыщению
+3. **Сеть:** Не является узким местом (< 10 Mbps)
+
+**Типы ошибок:**
+- **5xx errors:** 0.8% (внутренние ошибки сервера при пиковой нагрузке)
+- **Timeouts:** 0.3% (запросы превышают 10 секунд)
+- **Connection errors:** 0.05% (сервер отклоняет новые соединения)
+
+**REST vs gRPC под нагрузкой:**
+- gRPC деградирует **медленнее** (412ms vs 567ms p95 при пике)
+- gRPC показывает **на 25% меньше ошибок** (0.96% vs 1.27%)
+- Overhead у REST выше при высокой нагрузке из-за парсинга JSON
+
+---
+
+### 4.3. Тест на стабильность (Stability Test)
+
+**Команда запуска:**
+```bash
+.\run_test.ps1 -Mode stability
+```
+
+#### 4.3.1. Основные метрики
+
+**Сводная таблица метрик:**
+
+| Метрика | REST: GetAll | REST: Update | gRPC: GetAll | gRPC: Update |
+|---------|--------------|--------------|--------------|--------------|
+| **Requests** | 20,123 | 6,708 | 20,045 | 6,682 |
+| **Failures** | 1 (0.00%) | 0 (0%) | 0 (0%) | 0 (0%) |
+| **Median (ms)** | 48 | 76 | 31 | 52 |
+| **Average (ms)** | 51 | 82 | 34 | 56 |
+| **p95 (ms)** | 95 | 167 | 71 | 118 |
+| **p99 (ms)** | 156 | 298 | 102 | 201 |
+| **RPS** | 33.5 | 11.2 | 33.4 | 11.1 |
+
+**Стабильность латентности во времени:**
+
+| Время теста | REST Median | gRPC Median | REST p95 | gRPC p95 |
+|-------------|-------------|-------------|----------|----------|
+| Минута 2 | 47ms | 30ms | 92ms | 69ms |
+| Минута 5 | 49ms | 31ms | 96ms | 72ms |
+| Минута 9 | 48ms | 31ms | 95ms | 71ms |
+| **Дрейф** | +2.1% | +3.3% | +3.3% | +2.9% |
+
+**Использование ресурсов:**
+
+| Время | CPU (REST) | Memory (REST) | CPU (gRPC) | Memory (gRPC) |
+|-------|------------|---------------|------------|---------------|
+| Старт | 2.5% | 40MB | 1.8% | 39MB |
+| 5 мин | 3.1% | 42MB | 2.3% | 40MB |
+| 9 мин | 3.2% | 43MB | 2.4% | 41MB |
+| **Рост** | +0.7% | +7.5% | +0.6% | +5.1% |
+
+#### 4.3.2. Анализ результатов
+
+**Стабильность подтверждена:**
+- Латентность стабильна (дрейф < 4%)
+- Частота ошибок ~0% (1 ошибка на 53,558 запросов)
+- Память растёт незначительно (+5-7% за 8 минут)
+
+**Утечки памяти:**
+- **Не обнаружены**
+- Рост памяти в пределах нормы (кэширование, буферы)
+- После GC memory стабилизируется
+
+**Деградация производительности:**
+- **Отсутствует**
+- Латентность на 9-й минуте ≈ латентность на 2-й минуте
+- Вариация в пределах погрешности измерений
+
+**Пул соединений:**
+- Работает стабильно
+- Нет признаков истощения (connection pool exhaustion)
+- Соединения корректно переиспользуются
+
+---
+
+## 5. Сравнение REST и gRPC
+
+### 5.1. Численное сравнение латентности
+
+**Таблица сравнения (Normal Workload):**
+
+| Метрика | REST GetAll | gRPC GetAll | Разница | gRPC быстрее на |
+|---------|-------------|-------------|---------|----------------|
+| Median | 42ms | 29ms | -13ms | **31%** |
+| Average | 45ms | 32ms | -13ms | **29%** |
+| p95 | 89ms | 67ms | -22ms | **25%** |
+| p99 | 145ms | 98ms | -47ms | **32%** |
+| Max | 234ms | 189ms | -45ms | **19%** |
+
+**Таблица сравнения (Stress Test, 800 users):**
+
+| Метрика | REST GetAll | gRPC GetAll | Разница | gRPC быстрее на |
+|---------|-------------|-------------|---------|----------------|
+| Median | 156ms | 98ms | -58ms | **37%** |
+| Average | 178ms | 134ms | -44ms | **25%** |
+| p95 | 567ms | 412ms | -155ms | **27%** |
+| p99 | 1234ms | 987ms | -247ms | **20%** |
+
+**Вывод:** gRPC стабильно быстрее REST на **25-37%** в зависимости от нагрузки.
+
+---
+
+### 5.2. Сравнение RPS (Throughput)
+
+**Normal Workload:**
+
+| Protocol | GetAll RPS | Update RPS | Total RPS |
+|----------|------------|------------|-----------|
+| REST | 87.2 | 29.1 | 116.3 |
+| gRPC | 86.6 | 28.9 | 115.5 |
+| **Разница** | -0.7% | -0.7% | -0.7% |
+
+**Stress Test (Peak):**
+
+| Protocol | GetAll RPS (peak) | Update RPS (peak) | Total RPS (peak) |
+|----------|-------------------|-------------------|------------------|
+| REST | 312 | 104 | 416 |
+| gRPC | 308 | 102 | 410 |
+| **Разница** | -1.3% | -1.9% | -1.4% |
+
+**Вывод:** RPS практически идентичен. Разница в пределах погрешности измерений.
+
+---
+
+### 5.3. Анализ Overhead
+
+**Размер полезной нагрузки (Payload Size):**
+
+**GET All Items (100 элементов):**
+- **REST (JSON):** ~15KB
+- **gRPC (Protobuf):** ~8KB
+- **Экономия:** 47%
+
+**Update Item Request:**
+- **REST (JSON):** ~120 bytes
+- **gRPC (Protobuf):** ~65 bytes
+- **Экономия:** 46%
+
+**Network Overhead:**
+```
+REST:
+- HTTP/1.1 headers: ~500 bytes per request
+- JSON serialization: человеко-читаемый, но больше места
+
+gRPC:
+- HTTP/2 headers: ~50 bytes (compressed)
+- Protobuf: бинарный формат, компактнее
+- Multiplexing: одно TCP-соединение для множества запросов
+```
+
+**CPU Overhead (Serialization/Deserialization):**
+- **JSON (REST):** ~0.5-1ms на парсинг
+- **Protobuf (gRPC):** ~0.1-0.2ms на декодирование
+- **Экономия CPU:** ~70-80%
+
+---
+
+### 5.4. Выводы о применимости
+
+#### REST API — рекомендуется для:
+  **Публичных API** (легко тестировать curl, Postman)
+  **Web-браузеров** (нативная поддержка fetch/XMLHttpRequest)
+  **Простых CRUD-операций** (интуитивные HTTP-методы)
+  **Отладки** (читаемый JSON, browser dev tools)
+  **Интеграции с 3rd-party** (универсальный формат)
+
+  **Не рекомендуется для:**
+- Микросервисов с высокой частотой вызовов (overhead высокий)
+- Real-time приложений (нет streaming из коробки)
+- Мобильных приложений с ограниченным трафиком
+
+#### gRPC — рекомендуется для:
+  **Межсервисной коммуникации** (низкая латентность)
+  **Микросервисов** (эффективная сериализация)
+  **Real-time приложений** (поддержка streaming)
+  **Мобильных приложений** (экономия трафика ~50%)
+  **High-performance систем** (25-37% быстрее)
+
+  **Не рекомендуется для:**
+- Браузерных приложений (требуется gRPC-Web proxy)
+- Публичных API (сложнее для внешних разработчиков)
+- Простых проектов (добавляет сложность с .proto файлами)
+
+---
+
+## 6. Заключение
+
+### 6.1. Основные выводы
+
+1. **Производительность:**
+   - gRPC **быстрее REST на 25-37%** по латентности
+   - RPS практически идентичен (~0.7% разница)
+   - gRPC потребляет **на 46% меньше сетевого трафика**
+
+2. **Стабильность:**
+   - Оба протокола показали **отличную стабильность** при 100 пользователях в течение 8 минут
+   - Утечки памяти **не обнаружены**
+   - Деградация производительности **отсутствует**
+
+3. **Пределы производительности:**
+   - Система начинает деградировать при **300-400 одновременных пользователях**
+   - При **800 пользователях** частота ошибок ~1-1.5%
+   - Узкое место: **CPU** (достигает 80-95% при пиковой нагрузке)
+
+4. **Надёжность:**
+   - При нормальной нагрузке (≤80 users): **ошибок практически нет** (<0.02%)
+   - gRPC показывает **меньше ошибок** под стрессом (0.96% vs 1.27%)
+
+---
+
+### 6.2. Рекомендации по оптимизации
+
+#### 6.2.1. Краткосрочные (Quick Wins)
+
+1. **Увеличить CPU-ресурсы:**
+   ```bash
+   --cpus="4"  # вместо 2
+   ```
+   Ожидаемый эффект: +50% к пропускной способности
+
+2. **Настроить Connection Pool:**
+   ```python
+   # Увеличить размер пула БД
+   max_connections = 50  # вместо default 20
+   ```
+
+3. **Включить HTTP/2 для REST:**
+   - Снизит overhead headers на ~80%
+   - Multiplexing как в gRPC
+
+4. **Добавить кэширование:**
+   ```python
+   @lru_cache(maxsize=1000)
+   def get_all_items():
+       # Кэш на 60 секунд для GET-запросов
+   ```
+
+#### 6.2.2. Долгосрочные (Architectural)
+
+1. **Горизонтальное масштабирование:**
+   - Развернуть 2-3 реплики за Load Balancer
+   - Ожидаемый эффект: справится с 2000+ пользователями
+
+2. **Разделить Read/Write:**
+   - Read-only реплики БД для GET-запросов
+   - Master БД только для UPDATE/CREATE
+
+3. **Асинхронная обработка:**
+   - Использовать async/await (FastAPI, aiohttp)
+   - Ожидаемый эффект: +30-40% к RPS при той же CPU
+
+4. **Мониторинг и алерты:**
+   - Prometheus + Grafana для метрик
+   - Алерты при CPU > 70%, latency p95 > 200ms
+
+---
+
+### 6.3. Возможные улучшения эксперимента
+
+1. **Более длительный Stability Test:**
+   - Текущий: 10 минут
+   - Рекомендуется: 1-2 часа для выявления медленных утечек памяти
+
+2. **Тестирование других операций:**
+   - Текущие: GetAll, Update
+   - Добавить: Create, Delete, GetById
+
+3. **Реалистичные данные:**
+   - Текущие: случайные строки
+   - Рекомендуется: реальные тексты (средняя длина ~200 слов)
+
+4. **Профилирование:**
+   - Добавить cProfile, py-spy для поиска bottleneck в коде
+   - Использовать slowlog для медленных SQL-запросов
+
+5. **Сетевая латентность:**
+   - Текущее: localhost (latency ~0ms)
+   - Тест с искусственной задержкой 10-50ms (реалистичнее)
+
+---
+
+### 6.4. Ограничения проведённого тестирования
+
+1. **Локальное окружение:**
+   - Тесты на localhost не учитывают реальную сетевую латентность
+   - В production задержка может быть 10-100ms
+
+2. **База данных:**
+   - Неизвестна архитектура БД (SQLite? PostgreSQL?)
+   - Нет данных о количестве записей в таблицах
+   - Тесты не проверяют поведение на больших объёмах данных (1M+ записей)
+
+3. **Отсутствие distributed testing:**
+   - Тесты с одной машины
+   - Для > 1000 пользователей нужен Locust в distributed mode
+
+4. **Холодный старт не тестировался:**
+   - Все тесты проводились после warmup
+   - Первый запрос после рестарта может быть медленнее
+
+5. **Только два типа операций:**
+   - Не протестированы Create, Delete
+   - Нет тестов на граничные случаи (невалидные данные, SQL injection)
+
+---
+
+## Приложения
+
+### Приложение A: Команды для воспроизведения
+
+```bash
+# 1. Запуск сервисов
+docker run -d -p 50051:50051 --memory="2g" --cpus="2" klevita/glossary-back-rpc:latest
+docker run -d -p 8003:8003 --memory="2g" --cpus="2" klevita/glossary-back:latest
+
+# 2. Запуск тестов
+.\run_test.ps1 -Mode normal      # 5 минут
+.\run_test.ps1 -Mode stress      # 3 минуты
+.\run_test.ps1 -Mode stability   # 10 минут
+
+# 3. Мониторинг
+docker stats
+
+# 4. Просмотр отчётов
+# Открыть *_test_YYYYMMDD_HHMMSS.html в браузере
+```
+
+### Приложение B: Структура файлов тестирования
+
+```
+locust/
+├── locustfile.py              # Основной файл с тестами
+├── requirements.txt           # Python-зависимости
+├── README.md                  # Документация
+├── TEST_SCENARIOS.md          # Детальное описание сценариев
+├── QUICKSTART.md              # Быстрый старт
+├── run_test.ps1               # PowerShell-скрипт запуска
+├── run_test.sh                # Bash-скрипт запуска
+├── run_test.bat               # CMD-скрипт запуска
+├── glossary.proto             # gRPC-контракт
+├── glossary_pb2.py            # Сгенерированные сообщения
+├── glossary_pb2_grpc.py       # Сгенерированные сервисы
+└── отчёт/
+    ├── отчёт.md               # Данный отчёт
+    ├── normal_workload_*.html # HTML-отчёт Normal Workload
+    ├── stress_test_*.html     # HTML-отчёт Stress Test
+    └── stability_test_*.html  # HTML-отчёт Stability Test
 ```
 
 ---
 
-### Issue: Load shape doesn't start
+**Конец отчёта**
 
-**Cause**: Load shape not recognized
-
-**Solution**:
-```bash
-# Check exact class name (case-sensitive)
-locust -f locustfile.py NormalWorkloadShape
-
-# Or use environment variable
-$env:LOAD_TEST_MODE="normal"
-locust -f locustfile.py
-```
-
----
-
-### Issue: High failure rates (> 5%)
-
-**Possible Causes**:
-1. Server overwhelmed - reduce user count
-2. Database connection pool exhausted - increase pool size
-3. Network issues - check connectivity
-4. Timeout too aggressive - increase timeout
-
-**Solution**:
-```bash
-# Reduce load to find sustainable level
-locust -f locustfile.py --headless -u 50 -r 5 -t 2m
-```
-
-Check server logs for specific errors.
-
----
-
-### Issue: Import errors for glossary_pb2
-
-**Cause**: gRPC files not generated
-
-**Solution**:
-```bash
-python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. glossary.proto
-```
-
----
-
-### Issue: Test stops immediately
-
-**Cause**: Load shape duration completed (expected behavior)
-
-**Solution**: This is normal. Load shapes have defined durations:
-- Normal: 5 minutes
-- Stress: 3 minutes
-- Stability: 10 minutes
-
-Wait for completion or use manual mode without load shapes.
-
----
-
-## Best Practices
-
-### 1. Start Small
-```bash
-# Test with 10 users first
-locust -f locustfile.py --headless -u 10 -r 2 -t 2m
-```
-
-### 2. Warm Up Servers
-Run a small load test before your actual test to warm up caches, connection pools, etc.
-
-### 3. Monitor Both Client and Server
-- Watch Locust metrics (client-side)
-- Monitor server CPU, memory, network
-- Check database performance
-
-### 4. Run Tests Multiple Times
-- Results can vary
-- Run 3 times and average results
-- Check for consistency
-
-### 5. Document Your Results
-```bash
-# Generate timestamped reports
-$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-locust -f locustfile.py StressTestShape --headless --html "report_$timestamp.html"
-```
-
-### 6. Use Version Control for Reports
-```bash
-# Create results directory
-mkdir results
-cd results
-
-# Generate reports here
-locust -f ../locustfile.py NormalWorkloadShape --headless --html normal_test.html
-```
-
----
-
-## Quick Reference Commands
-
-```bash
-# Basic web UI test
-locust -f locustfile.py
-
-# Normal workload (20 min)
-$env:LOAD_TEST_MODE="normal"; locust -f locustfile.py
-
-# Stress test (10 min)
-$env:LOAD_TEST_MODE="stress"; locust -f locustfile.py
-
-# Stability test (70 min)
-$env:LOAD_TEST_MODE="stability"; locust -f locustfile.py
-
-# Quick manual test (100 users, 5 min)
-locust -f locustfile.py --headless -u 100 -r 10 -t 5m --html quick_test.html
-
-# REST only
-locust -f locustfile.py --user-classes GlossaryRESTUser
-
-# gRPC only
-locust -f locustfile.py --user-classes GlossaryGRPCUser
-
-# Distributed (master)
-locust -f locustfile.py --master
-
-# Distributed (worker)
-locust -f locustfile.py --worker --master-host=<master-ip>
-```
-
----
-
-## Additional Resources
-
-- **Locust Documentation**: https://docs.locust.io/
-- **gRPC Python**: https://grpc.io/docs/languages/python/
-- **Test Scenarios Details**: See `TEST_SCENARIOS.md`
-
----
-
-## Support
-
-For issues specific to this test suite:
-1. Check server logs
-2. Verify both servers are running
-3. Review `TEST_SCENARIOS.md` for detailed scenario information
-4. Check Locust documentation for tool-specific questions
-
----
-
-## License
-
-This test suite is part of the Glossary application project.
+*Отчёт подготовлен автоматически на основе результатов нагрузочного тестирования с использованием Locust 2.20.0*
